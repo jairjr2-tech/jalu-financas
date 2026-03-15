@@ -2074,29 +2074,21 @@ async function handleFileSelected(file, type) {
   showToast('Enviando arquivo...');
 
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Sessão expirada. Faça login novamente.');
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('account_id', account_id);
     formData.append('source', source);
 
-    const res = await fetch(EDGE_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': SUPABASE_ANON
-      },
+    // O invoke do Supabase gerencia os Headers, o JWT e o CORS perfeitamente
+    const { data: result, error } = await sb.functions.invoke('import-transactions', {
       body: formData,
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Erro ${res.status} no servidor`);
+    // Se a Edge Function retornar erro (ex: formato inválido), nós capturamos aqui
+    if (error) {
+      throw new Error(error.message || 'Falha interna na Edge Function');
     }
 
-    const result = await res.json();
     state.pendingImport = { file, source, account_id, result };
     showImportPreview(result);
 
