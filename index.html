@@ -1208,117 +1208,52 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
 // Força refresh do token ao carregar
 sb.auth.startAutoRefresh();
 
-// ═══════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════
-let state = {
-  user: null, profile: null, household: null,
-  profiles: [], accounts: [], categories: [], transactions: [],
-  budgets: [], snapshots: [], importLogs: [],
-  currentPage: 'dashboard',
-  currentView: 'household',   // 'household' | 'mine'
-  monthOffset: 0,
-  txType: 'debit',
-  pendingImport: null,        // { file, source, account_id, parsed }
-  charts: {},
-};
+// Função central e à prova de falhas para gerenciar entrada/saída
+async function handleSession(session) {
+  if (!session || !session.user) {
+    state.user = null;
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
 
-// ═══════════════════════════════════════════════════════════
-// UTILS
-// ═══════════════════════════════════════════════════════════
-const fmt = (v, abs=false) => {
-  const n = abs ? Math.abs(v) : v;
-  return 'R$ ' + Math.abs(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
-};
-const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-const fmtMonth = d => { const m=new Date(d+'T00:00:00'); return m.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}); };
-const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : '';
-const getMonth = () => { const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+state.monthOffset); return d; };
-const monthStr = () => { const d=getMonth(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+  // Previne recarregamentos repetidos se já estivermos logados
+  if (state.user && state.user.id === session.user.id) return;
 
-function inCurrentMonth(dateStr) {
-  const ms = monthStr();
-  return dateStr && dateStr.substring(0,7) === ms;
+  state.user = session.user;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  try {
+    await loadAll();
+    navigateTo(state.currentPage);
+  } catch (err) {
+    console.error("Erro interno ao carregar dados:", err);
+  }
 }
 
-function getInitials(name='') {
-  return name.split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');
-}
+// 1. Verifica quem está logado imediatamente no load da página
+sb.auth.getSession().then(({ data: { session } }) => {
+  handleSession(session);
+});
 
-function destroyChart(id) {
-  if (state.charts[id]) { state.charts[id].destroy(); delete state.charts[id]; }
-}
-
-// ═══════════════════════════════════════════════════════════
-// THEME
-// ═══════════════════════════════════════════════════════════
-function initTheme() {
-  const saved = localStorage.getItem('theme') ||
-    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  applyTheme(saved);
-}
-function applyTheme(theme) {
-  document.body.setAttribute('data-theme', theme);
-  document.getElementById('theme-icon').textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
-  localStorage.setItem('theme', theme);
-}
-function toggleTheme() {
-  const current = document.body.getAttribute('data-theme');
-  applyTheme(current === 'dark' ? 'light' : 'dark');
-  if (Object.keys(state.charts).length) renderDashboard();
-}
-initTheme();
-
-// ═══════════════════════════════════════════════════════════
-// TOAST
-// ═══════════════════════════════════════════════════════════
-let toastTimer;
-function showToast(msg, type='') {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'toast show' + (type ? ' '+type : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
-}
-
-// ═══════════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════════
-function showRegister() {
-  document.getElementById('auth-login').style.display='none';
-  document.getElementById('auth-register').style.display='block';
-}
-function showLogin() {
-  document.getElementById('auth-register').style.display='none';
-  document.getElementById('auth-login').style.display='block';
-}
-
-async function signIn() {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass  = document.getElementById('auth-password').value;
-  if (!email || !pass) { showToast('Preencha email e senha','error'); return; }
-  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
-  if (error) showToast(error.message, 'error');
-}
-
-async function signUp() {
-  const name  = document.getElementById('reg-name').value.trim();
-  const email = document.getElementById('reg-email').value.trim();
-  const pass  = document.getElementById('reg-password').value;
-  if (!name || !email || !pass) { showToast('Preencha todos os campos','error'); return; }
-  if (pass.length < 8) { showToast('Senha mínimo 8 caracteres','error'); return; }
-  const { error } = await sb.auth.signUp({ email, password: pass,
-    options: { data: { name } } });
-  if (error) showToast(error.message,'error');
-  else showToast('Conta criada! Verifique seu e-mail.','success');
-}
+// 2. Fica escutando se a sessão cair ou trocar de usuário
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    handleSession(null);
+  } else if (session) {
+    handleSession(session);
+  }
+});
 
 async function signOut() {
-  await sb.auth.signOut();
-  state.user = null;
-  state.profile = null;
-  state.household = null;
-  document.getElementById('auth-screen').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
+  try { 
+    await sb.auth.signOut(); 
+  } catch (err) {
+    console.error("Erro no Supabase ao deslogar:", err);
+  } finally {
+    handleSession(null); // Força a tela de login mesmo se a internet cair no meio do clique
+  }
 }
 
 // Auth state listener - Centralizado
@@ -2062,21 +1997,33 @@ async function handleFileSelected(file, type) {
   showToast('Enviando arquivo...');
 
   try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Sessão expirada. Faça login novamente.');
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('account_id', account_id);
     formData.append('source', source);
 
-    // Usa o client nativo do Supabase para injetar os headers automaticamente
-    const { data: result, error } = await sb.functions.invoke('import-transactions', {
+    // Usamos o fetch nativo para preservar o "boundary" do multipart/form-data
+    const res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON
+      },
       body: formData,
     });
 
-    if (error) throw error;
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Erro ${res.status} no servidor`);
+    }
 
+    const result = await res.json();
     state.pendingImport = { file, source, account_id, result };
     showImportPreview(result);
-    
+
   } catch (err) {
     showToast('Erro: ' + (err.message || 'Falha na importação'), 'error');
     console.error('Import exception:', err);
