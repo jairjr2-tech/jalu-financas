@@ -1340,8 +1340,23 @@ async function signUp() {
 
 async function signOut() {
   await sb.auth.signOut();
-  location.reload();
+  state.user = null;
+  state.profile = null;
+  state.household = null;
+  localStorage.removeItem('ape-financas-auth');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
 }
+
+// Verifica sessão existente ao carregar
+sb.auth.getSession().then(({ data: { session } }) => {
+  if (session?.user) {
+    state.user = session.user;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    loadAll();
+  }
+});
 
 // Auth state listener
 sb.auth.onAuthStateChange(async (event, session) => {
