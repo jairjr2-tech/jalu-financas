@@ -2074,35 +2074,29 @@ async function handleFileSelected(file, type) {
   showToast('Enviando arquivo...');
 
   try {
-    // 1. Pega a sessão atual
-    let { data: { session } } = await sb.auth.getSession();
+    // 1. Pega a sessão atual, sem forçar um refresh manual que invalida o token
+    const { data: { session }, error: sessionError } = await sb.auth.getSession();
     
-    // 2. Força a renovação do token para blindar contra o Erro 401 (Unauthorized)
-    const { data: refreshData } = await sb.auth.refreshSession();
-    if (refreshData?.session) {
-      session = refreshData.session;
+    if (sessionError || !session || !session.access_token) {
+      throw new Error('Sessão inválida. Faça login novamente.');
     }
-
-    if (!session) throw new Error('Sessão expirada. Recarregue a página e faça login novamente.');
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('account_id', account_id);
     formData.append('source', source);
 
-    // 3. Usamos o fetch nativo para evitar o bug do FormData no SDK do Supabase
+    // 2. Envia usando o fetch nativo, que constrói o multipart/form-data corretamente
     const res = await fetch(EDGE_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
         'apikey': SUPABASE_ANON
-        // ATENÇÃO: Nunca declare o 'Content-Type' aqui. O navegador precisa 
-        // gerar o boundary do multipart/form-data de forma automática.
       },
       body: formData,
     });
 
-    // 4. Se falhar, captura a mensagem real de erro que a Edge Function devolveu
+    // 3. Captura qualquer erro real que o servidor devolva
     if (!res.ok) {
       let errorMsg = `Erro ${res.status} no servidor`;
       try {
@@ -2115,6 +2109,7 @@ async function handleFileSelected(file, type) {
       throw new Error(errorMsg);
     }
 
+    // 4. Sucesso!
     const result = await res.json();
     state.pendingImport = { file, source, account_id, result };
     showImportPreview(result);
