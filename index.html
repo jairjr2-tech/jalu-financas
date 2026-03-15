@@ -18,7 +18,11 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+  console.log('supabase keys:', Object.keys(window.supabase || {}));
+  console.log('createClient:', typeof window.supabase?.createClient);
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
 <style>
 /* ═══════════════════════════════════════════════════════════
@@ -1224,8 +1228,8 @@ const SUPABASE_URL  = 'https://lntlqshqiruhtpyvlchs.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxudGxxc2hxaXJ1aHRweXZsY2hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1OTMyODcsImV4cCI6MjA4OTE2OTI4N30.N2Fs0xASBU4QdO7U3trHDNQrwO6yW-28NMlmWTvVAOo';
 const EDGE_URL      = `${SUPABASE_URL}/functions/v1/import-transactions`;
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
+const _sb = window.supabase || window.supabaseJs;
+const sb = _sb.createClient(SUPABASE_URL, SUPABASE_ANON);
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
