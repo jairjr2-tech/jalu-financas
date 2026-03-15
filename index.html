@@ -18,7 +18,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
-
+<!-- Chart.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
 <style>
@@ -1221,11 +1221,10 @@ select.field-input { cursor: pointer; }
 // ═══════════════════════════════════════════════════════════
 // CONFIG — substitua pelos seus valores do Supabase
 // ═══════════════════════════════════════════════════════════
-const SUPABASE_URL  = 'https://lntlqshqiruhtpyvlchs.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxudGxxc2hxaXJ1aHRweXZsY2hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1OTMyODcsImV4cCI6MjA4OTE2OTI4N30.N2Fs0xASBU4QdO7U3trHDNQrwO6yW-28NMlmWTvVAOo';
+const SUPABASE_URL  = 'https://SEU_PROJETO.supabase.co';
+const SUPABASE_ANON = 'SUA_ANON_KEY';
 const EDGE_URL      = `${SUPABASE_URL}/functions/v1/import-transactions`;
 
-const _sb = window.supabase || window.supabaseJs;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
     detectSessionInUrl: true,
@@ -1234,6 +1233,19 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
     storageKey: 'ape-financas-auth'
   }
 });
+
+// Restaura sessão ao recarregar
+window.addEventListener('load', () => {
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user && !state.user) {
+      state.user = session.user;
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      loadAll();
+    }
+  });
+});
+
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
@@ -1343,43 +1355,24 @@ async function signOut() {
   state.user = null;
   state.profile = null;
   state.household = null;
-  localStorage.removeItem('ape-financas-auth');
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
 }
 
-// Verifica sessão existente ao carregar
-sb.auth.getSession().then(({ data: { session } }) => {
-  if (session?.user) {
-    state.user = session.user;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    loadAll();
-  }
-});
-
 // Auth state listener
 sb.auth.onAuthStateChange(async (event, session) => {
-  console.log('auth event:', event, session?.user?.email || 'null');
-  
   if (event === 'SIGNED_OUT') {
     state.user = null;
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
     return;
   }
-
-  if (session?.user) {
+  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+    const isFirstLoad = !state.user;
     state.user = session.user;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-      await loadAll();
-    }
-  } else if (event !== 'INITIAL_SESSION') {
-    state.user = null;
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
+    if (isFirstLoad) await loadAll();
   }
 });
 
@@ -2093,10 +2086,15 @@ async function handleFileSelected(file, type) {
     return;
   }
 
-  showToast('Lendo arquivo...');
+  showToast('Enviando arquivo...');
 
   try {
     const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      showToast('Sessão expirada. Faça login novamente.','error');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('account_id', account_id);
@@ -2107,14 +2105,26 @@ async function handleFileSelected(file, type) {
       headers: { Authorization: `Bearer ${session.access_token}` },
       body: formData,
     });
-    const result = await res.json();
 
-    if (!res.ok) { showToast(result.error||'Erro na importação','error'); return; }
+    let result;
+    try {
+      result = await res.json();
+    } catch(e) {
+      showToast('Resposta inválida da função. Verifique o deploy.','error');
+      return;
+    }
+
+    if (!res.ok) {
+      showToast(result.error || `Erro ${res.status} na importação`,'error');
+      console.error('Import error:', result);
+      return;
+    }
 
     state.pendingImport = { file, source, account_id, result };
     showImportPreview(result);
   } catch (err) {
-    showToast('Erro: '+err.message, 'error');
+    showToast('Erro: ' + err.message, 'error');
+    console.error('Import exception:', err);
   }
 }
 
