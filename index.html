@@ -2074,21 +2074,48 @@ async function handleFileSelected(file, type) {
   showToast('Enviando arquivo...');
 
   try {
+    // 1. Pega a sessão atual
+    let { data: { session } } = await sb.auth.getSession();
+    
+    // 2. Força a renovação do token para blindar contra o Erro 401 (Unauthorized)
+    const { data: refreshData } = await sb.auth.refreshSession();
+    if (refreshData?.session) {
+      session = refreshData.session;
+    }
+
+    if (!session) throw new Error('Sessão expirada. Recarregue a página e faça login novamente.');
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('account_id', account_id);
     formData.append('source', source);
 
-    // O invoke do Supabase gerencia os Headers, o JWT e o CORS perfeitamente
-    const { data: result, error } = await sb.functions.invoke('import-transactions', {
+    // 3. Usamos o fetch nativo para evitar o bug do FormData no SDK do Supabase
+    const res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON
+        // ATENÇÃO: Nunca declare o 'Content-Type' aqui. O navegador precisa 
+        // gerar o boundary do multipart/form-data de forma automática.
+      },
       body: formData,
     });
 
-    // Se a Edge Function retornar erro (ex: formato inválido), nós capturamos aqui
-    if (error) {
-      throw new Error(error.message || 'Falha interna na Edge Function');
+    // 4. Se falhar, captura a mensagem real de erro que a Edge Function devolveu
+    if (!res.ok) {
+      let errorMsg = `Erro ${res.status} no servidor`;
+      try {
+        const errData = await res.json();
+        errorMsg = errData.error || errorMsg;
+      } catch (e) {
+        const errText = await res.text();
+        errorMsg = errText || errorMsg;
+      }
+      throw new Error(errorMsg);
     }
 
+    const result = await res.json();
     state.pendingImport = { file, source, account_id, result };
     showImportPreview(result);
 
