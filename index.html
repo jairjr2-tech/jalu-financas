@@ -2054,12 +2054,12 @@ function dropFile(e, type) {
   const zoneId = type==='ofx' ? 'zone-ofx' : 'zone-csv';
   dragLeave(zoneId);
   const file = e.dataTransfer.files[0];
-  if (file) handleFileSelected(file, type);
+  if (file) elected(file, type);
 }
 
 function fileSelected(e, type) {
   const file = e.target.files[0];
-  if (file) handleFileSelected(file, type);
+  if (file) elected(file, type);
 }
 
 async function handleFileSelected(file, type) {
@@ -2077,21 +2077,22 @@ async function handleFileSelected(file, type) {
     const source = type === "ofx" ? "itau_ofx" : "mobius_csv";
 
     const formData = new FormData();
-
     formData.append("file", file);
     formData.append("account_id", account_id);
     formData.append("source", source);
 
     const { data, error } = await sb.functions.invoke(
       "import-transactions",
-      {
-        body: formData
-      }
+      { body: formData }
     );
 
     if (error) {
-      throw error;
+      console.error("EDGE FUNCTION ERROR:", error);
+      showToast(error.message || "Erro na função", "error");
+      return;
     }
+
+    console.log("IMPORT RESULT", data);
 
     state.pendingImport = data;
 
