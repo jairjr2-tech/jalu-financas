@@ -1233,7 +1233,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
     storageKey: 'ape-financas-auth'
   }
 });
-
+// Força refresh do token ao carregar
+sb.auth.startAutoRefresh();
 // Restaura sessão ao recarregar
 window.addEventListener('load', () => {
   sb.auth.getSession().then(({ data: { session } }) => {
@@ -2089,11 +2090,16 @@ async function handleFileSelected(file, type) {
   showToast('Enviando arquivo...');
 
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      showToast('Sessão expirada. Faça login novamente.','error');
-      return;
-    }
+    // Tenta renovar o token antes de usar
+let { data: { session } } = await sb.auth.getSession();
+if (!session) {
+  const { data: refreshData } = await sb.auth.refreshSession();
+  session = refreshData.session;
+}
+if (!session) {
+  showToast('Sessão expirada. Faça login novamente.','error');
+  return;
+}
 
     const formData = new FormData();
     formData.append('file', file);
