@@ -1205,10 +1205,51 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
     storageKey: 'ape-financas-auth'
   }
 });
-// Força refresh do token ao carregar
+// ═══════════════════════════════════════════════════════════
+// AUTH E CONTROLE DE SESSÃO
+// ═══════════════════════════════════════════════════════════
+
+// 1. Funções de Interface (Telas de Login e Registro)
+function showRegister() {
+  document.getElementById('auth-login').style.display='none';
+  document.getElementById('auth-register').style.display='block';
+}
+
+function showLogin() {
+  document.getElementById('auth-register').style.display='none';
+  document.getElementById('auth-login').style.display='block';
+}
+
+// 2. Funções de Ação (Comunicação com o Supabase)
+async function signIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-password').value;
+  if (!email || !pass) { showToast('Preencha email e senha','error'); return; }
+  
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) showToast(error.message, 'error');
+}
+
+async function signUp() {
+  const name  = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pass  = document.getElementById('reg-password').value;
+  if (!name || !email || !pass) { showToast('Preencha todos os campos','error'); return; }
+  if (pass.length < 8) { showToast('Senha mínimo 8 caracteres','error'); return; }
+  
+  const { error } = await sb.auth.signUp({ 
+    email, 
+    password: pass,
+    options: { data: { name } } 
+  });
+  
+  if (error) showToast(error.message,'error');
+  else showToast('Conta criada! Verifique seu e-mail.','success');
+}
+
+// 3. Lógica Blindada de Sessão (Resolve o problema do F5)
 sb.auth.startAutoRefresh();
 
-// Função central e à prova de falhas para gerenciar entrada/saída
 async function handleSession(session) {
   if (!session || !session.user) {
     state.user = null;
@@ -1232,12 +1273,12 @@ async function handleSession(session) {
   }
 }
 
-// 1. Verifica quem está logado imediatamente no load da página
+// 3.1 Verifica quem está logado imediatamente no load da página
 sb.auth.getSession().then(({ data: { session } }) => {
   handleSession(session);
 });
 
-// 2. Fica escutando se a sessão cair ou trocar de usuário
+// 3.2 Fica escutando se a sessão cair ou trocar de usuário
 sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT') {
     handleSession(null);
@@ -1246,13 +1287,14 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// 4. Logout protegido contra falhas de rede
 async function signOut() {
   try { 
     await sb.auth.signOut(); 
   } catch (err) {
     console.error("Erro no Supabase ao deslogar:", err);
   } finally {
-    handleSession(null); // Força a tela de login mesmo se a internet cair no meio do clique
+    handleSession(null); // Força a tela de login mesmo se a rede falhar
   }
 }
 
