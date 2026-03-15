@@ -2063,60 +2063,61 @@ function fileSelected(e, type) {
 }
 
 async function handleFileSelected(file, type) {
-  const source = type === 'ofx' ? 'itau_ofx' : 'mobius_csv';
-  const account_id = document.getElementById(type==='ofx' ? 'ofx-account-select' : 'csv-account-select').value;
-
-  if (!account_id) {
-    showToast('Selecione a conta destino primeiro','error');
-    return;
-  }
-
-  showToast('Enviando arquivo...');
 
   try {
-    // 1. Pega a sessão atual, sem forçar um refresh manual que invalida o token
-    const { data: { session }, error: sessionError } = await sb.auth.getSession();
-    
-    if (sessionError || !session || !session.access_token) {
-      throw new Error('Sessão inválida. Faça login novamente.');
+
+    const accountSelect = document.getElementById(`${type}-account-select`);
+    const account_id = accountSelect.value;
+
+    if (!account_id) {
+      showToast("Selecione a conta destino", "error");
+      return;
+    }
+
+    const { data: { session } } = await sb.auth.getSession();
+
+    if (!session) {
+      showToast("Usuário não autenticado", "error");
+      return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('account_id', account_id);
-    formData.append('source', source);
+    formData.append("file", file);
+    formData.append("account_id", account_id);
+    formData.append("source", type === "ofx" ? "itau_ofx" : "mobius_csv");
 
-    // 2. Envia usando o fetch nativo, que constrói o multipart/form-data corretamente
     const res = await fetch(EDGE_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': SUPABASE_ANON
+        Authorization: `Bearer ${session.access_token}`
       },
-      body: formData,
+      body: formData
     });
 
-    // 3. Captura qualquer erro real que o servidor devolva
     if (!res.ok) {
-      let errorMsg = `Erro ${res.status} no servidor`;
+
+      let msg = `Erro ${res.status}`;
+
       try {
-        const errData = await res.json();
-        errorMsg = errData.error || errorMsg;
-      } catch (e) {
-        const errText = await res.text();
-        errorMsg = errText || errorMsg;
-      }
-      throw new Error(errorMsg);
+        const txt = await res.text();
+        msg = txt;
+      } catch {}
+
+      throw new Error(msg);
     }
 
-    // 4. Sucesso!
     const result = await res.json();
-    state.pendingImport = { file, source, account_id, result };
+
+    state.pendingImport = result;
+
     showImportPreview(result);
 
   } catch (err) {
-    showToast('Erro: ' + (err.message || 'Falha na importação'), 'error');
-    console.error('Import exception:', err);
+
+    console.error("Import exception:", err);
+
+    showToast(err.message || "Erro ao importar", "error");
+
   }
 }
 
