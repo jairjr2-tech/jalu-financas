@@ -2082,6 +2082,7 @@ async function handleFileSelected(file, type) {
     }
 
     const formData = new FormData();
+
     formData.append("file", file);
     formData.append("account_id", account_id);
     formData.append("source", type === "ofx" ? "itau_ofx" : "mobius_csv");
@@ -2089,21 +2090,17 @@ async function handleFileSelected(file, type) {
     const res = await fetch(EDGE_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${session.access_token}`
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: SUPABASE_ANON
       },
       body: formData
     });
 
     if (!res.ok) {
 
-      let msg = `Erro ${res.status}`;
+      const txt = await res.text();
 
-      try {
-        const txt = await res.text();
-        msg = txt;
-      } catch {}
-
-      throw new Error(msg);
+      throw new Error(txt);
     }
 
     const result = await res.json();
@@ -2116,7 +2113,7 @@ async function handleFileSelected(file, type) {
 
     console.error("Import exception:", err);
 
-    showToast(err.message || "Erro ao importar", "error");
+    showToast("Erro ao importar arquivo", "error");
 
   }
 }
