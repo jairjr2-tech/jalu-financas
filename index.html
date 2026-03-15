@@ -2074,40 +2074,28 @@ async function handleFileSelected(file, type) {
       return;
     }
 
-    const { data: { session } } = await sb.auth.getSession();
-
-    if (!session) {
-      showToast("Usuário não autenticado", "error");
-      return;
-    }
+    const source = type === "ofx" ? "itau_ofx" : "mobius_csv";
 
     const formData = new FormData();
 
     formData.append("file", file);
     formData.append("account_id", account_id);
-    formData.append("source", type === "ofx" ? "itau_ofx" : "mobius_csv");
+    formData.append("source", source);
 
-    const res = await fetch(EDGE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: SUPABASE_ANON
-      },
-      body: formData
-    });
+    const { data, error } = await sb.functions.invoke(
+      "import-transactions",
+      {
+        body: formData
+      }
+    );
 
-    if (!res.ok) {
-
-      const txt = await res.text();
-
-      throw new Error(txt);
+    if (error) {
+      throw error;
     }
 
-    const result = await res.json();
+    state.pendingImport = data;
 
-    state.pendingImport = result;
-
-    showImportPreview(result);
+    showImportPreview(data);
 
   } catch (err) {
 
