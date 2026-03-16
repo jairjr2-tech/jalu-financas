@@ -2057,9 +2057,14 @@ function dropFile(e, type) {
   if (file) elected(file, type);
 }
 
-function fileSelected(e, type) {
-  const file = e.target.files[0];
-  if (file) elected(file, type);
+function fileSelected(event, type) {
+
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  handleFileSelected(file, type);
+
 }
 
 async function handleFileSelected(file, type) {
@@ -2077,6 +2082,7 @@ async function handleFileSelected(file, type) {
     const source = type === "ofx" ? "itau_ofx" : "mobius_csv";
 
     const formData = new FormData();
+
     formData.append("file", file);
     formData.append("account_id", account_id);
     formData.append("source", source);
@@ -2087,8 +2093,8 @@ async function handleFileSelected(file, type) {
     );
 
     if (error) {
-      console.error("EDGE FUNCTION ERROR:", error);
-      showToast(error.message || "Erro na função", "error");
+      console.error("Edge Function error:", error);
+      showToast(error.message || "Erro na importação", "error");
       return;
     }
 
@@ -2105,6 +2111,7 @@ async function handleFileSelected(file, type) {
     showToast("Erro ao importar arquivo", "error");
 
   }
+
 }
 
 function showImportPreview(result) {
