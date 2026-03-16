@@ -2074,28 +2074,20 @@ async function handleFileSelected(file, type) {
     const accountSelect = document.getElementById(`${type}-account-select`);
     const account_id = accountSelect.value;
 
-    if (!account_id) {
-      showToast("Selecione a conta destino", "error");
-      return;
-    }
-
     const form = new FormData();
-
     form.append("file", file);
     form.append("account_id", account_id);
 
     const { data, error } =
-      await sb.functions.invoke("import-upload", {
-        body: form
-      });
+      await sb.functions.invoke("import-upload", { body: form });
+
+    console.log("EDGE RESPONSE", data);
+    console.log("EDGE ERROR", error);
 
     if (error) {
-      console.error(error);
-      showToast("Erro no upload", "error");
+      alert(JSON.stringify(error));
       return;
     }
-
-    console.log("UPLOAD RESULT", data);
 
     state.pendingUpload = data;
 
@@ -2103,9 +2095,7 @@ async function handleFileSelected(file, type) {
 
   } catch (err) {
 
-    console.error(err);
-
-    showToast("Erro ao importar", "error");
+    console.error("IMPORT ERROR", err);
 
   }
 
