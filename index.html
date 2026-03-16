@@ -2069,35 +2069,30 @@ function fileSelected(event, type) {
 
 async function handleFileSelected(file, type) {
 
-  try {
+  const accountSelect = document.getElementById(`${type}-account-select`);
+  const account_id = accountSelect.value;
 
-    const accountSelect = document.getElementById(`${type}-account-select`);
-    const account_id = accountSelect.value;
+  const text = await file.text();
 
-    const form = new FormData();
-    form.append("file", file);
-    form.append("account_id", account_id);
+  const { data, error } =
+    await sb.functions.invoke("import-upload", {
+      body: {
+        file: text,
+        account_id
+      }
+    });
 
-    const { data, error } =
-      await sb.functions.invoke("import-upload", { body: form });
+  console.log("EDGE RESPONSE", data);
+  console.log("EDGE ERROR", error);
 
-    console.log("EDGE RESPONSE", data);
-    console.log("EDGE ERROR", error);
-
-    if (error) {
-      alert(JSON.stringify(error));
-      return;
-    }
-
-    state.pendingUpload = data;
-
-    showImportPreview(data.preview);
-
-  } catch (err) {
-
-    console.error("IMPORT ERROR", err);
-
+  if (error) {
+    alert(error.message);
+    return;
   }
+
+  state.pendingUpload = data;
+
+  showImportPreview(data.preview);
 
 }
 
