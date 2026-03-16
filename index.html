@@ -2079,36 +2079,33 @@ async function handleFileSelected(file, type) {
       return;
     }
 
-    const source = type === "ofx" ? "itau_ofx" : "mobius_csv";
+    const form = new FormData();
 
-    const formData = new FormData();
+    form.append("file", file);
+    form.append("account_id", account_id);
 
-    formData.append("file", file);
-    formData.append("account_id", account_id);
-    formData.append("source", source);
-
-    const { data, error } = await sb.functions.invoke(
-      "import-transactions",
-      { body: formData }
-    );
+    const { data, error } =
+      await sb.functions.invoke("import-upload", {
+        body: form
+      });
 
     if (error) {
-      console.error("Edge Function error:", error);
-      showToast(error.message || "Erro na importação", "error");
+      console.error(error);
+      showToast("Erro no upload", "error");
       return;
     }
 
-    console.log("IMPORT RESULT", data);
+    console.log("UPLOAD RESULT", data);
 
-    state.pendingImport = data;
+    state.pendingUpload = data;
 
-    showImportPreview(data);
+    showImportPreview(data.preview);
 
   } catch (err) {
 
-    console.error("Import exception:", err);
+    console.error(err);
 
-    showToast("Erro ao importar arquivo", "error");
+    showToast("Erro ao importar", "error");
 
   }
 
@@ -2143,13 +2140,38 @@ function showImportPreview(result) {
 }
 
 async function confirmImport() {
-  showToast('Importação concluída! ✓', 'success');
-  document.getElementById('import-preview').style.display = 'none';
-  state.pendingImport = null;
-  await loadTransactions();
-  await loadImportLogs();
-  renderImportHistory();
-  renderDashboard();
+
+  try {
+
+    const { data, error } =
+      await sb.functions.invoke("import-confirm", {
+        body: {
+          upload_id: state.pendingUpload.upload_id
+        }
+      });
+
+    if (error) {
+      console.error(error);
+      showToast("Erro ao confirmar importação", "error");
+      return;
+    }
+
+    console.log("CONFIRM RESULT", data);
+
+    showToast(`${data.inserted} transações importadas`, "success");
+
+    cancelImport();
+
+    await loadTransactions();
+
+  } catch (err) {
+
+    console.error(err);
+
+    showToast("Erro ao confirmar importação", "error");
+
+  }
+
 }
 
 function cancelImport() {
